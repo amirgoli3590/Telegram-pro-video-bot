@@ -1,43 +1,98 @@
-from bot import bot
 from telebot import types
 
 def admin_handler(bot, message, db, save_db):
-    markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("➕ افزودن دسته‌بندی", callback_data="add_category"))
-    markup.add(types.InlineKeyboardButton("➖ حذف دسته‌بندی", callback_data="remove_category"))
-    markup.add(types.InlineKeyboardButton("📥 افزودن قسمت", callback_data="add_episode"))
-    markup.add(types.InlineKeyboardButton("🗑 حذف قسمت", callback_data="remove_episode"))
-    markup.add(types.InlineKeyboardButton("👥 مدیریت کاربران", callback_data="manage_users"))
-    markup.add(types.InlineKeyboardButton("📊 آمار کلی", callback_data="stats"))
-    bot.send_message(message.chat.id, "👑 پنل مدیریت:", reply_markup=markup)
+    chat_id = str(message.chat.id)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("➕ افزودن دسته‌بندی", "➖ حذف دسته‌بندی")
+    markup.row("📂 افزودن قسمت", "🗑 حذف قسمت")
+    markup.row("📋 نمایش دسته‌بندی‌ها", "🚪 خروج")
+    msg = bot.send_message(chat_id, "🔧 پنل مدیریت فعال شد:", reply_markup=markup)
+    bot.register_next_step_handler(msg, process_admin_option, bot, db, save_db)
 
-@bot.callback_query_handler(func=lambda call: call.data == "add_category")
-def add_category_callback(call):
-    msg = bot.send_message(call.message.chat.id, "📂 نام دسته‌بندی جدید را وارد کنید:")
-    bot.register_next_step_handler(msg, lambda m: add_category(bot, m, db, save_db))
+def process_admin_option(message, bot, db, save_db):
+    if message.text == "➕ افزودن دسته‌بندی":
+        msg = bot.send_message(message.chat.id, "نام دسته‌بندی جدید را بفرست:")
+        bot.register_next_step_handler(msg, add_category, bot, db, save_db)
+    elif message.text == "➖ حذف دسته‌بندی":
+        msg = bot.send_message(message.chat.id, "نام دسته‌بندی برای حذف را بفرست:")
+        bot.register_next_step_handler(msg, delete_category, bot, db, save_db)
+    elif message.text == "📂 افزودن قسمت":
+        msg = bot.send_message(message.chat.id, "نام دسته‌بندی که می‌خواهی قسمت به آن اضافه کنی را بفرست:")
+        bot.register_next_step_handler(msg, add_episode, bot, db, save_db)
+    elif message.text == "🗑 حذف قسمت":
+        msg = bot.send_message(message.chat.id, "نام دسته‌بندی که می‌خواهی قسمت از آن حذف کنی را بفرست:")
+        bot.register_next_step_handler(msg, delete_episode, bot, db, save_db)
+    elif message.text == "📋 نمایش دسته‌بندی‌ها":
+        show_categories(message, bot, db)
+    elif message.text == "🚪 خروج":
+        bot.send_message(message.chat.id, "✅ از پنل مدیریت خارج شدید.")
+    else:
+        bot.send_message(message.chat.id, "⚠️ دستور نامعتبر است.")
+        admin_handler(bot, message, db, save_db)
 
-def add_category(bot, message, db, save_db):
-    name = message.text.strip()
-    if name in db['categories']:
+def add_category(message, bot, db, save_db):
+    category = message.text.strip()
+    if category not in db['categories']:
+        db['categories'][category] = {}
+        save_db(db)
+        bot.send_message(message.chat.id, f"✅ دسته‌بندی «{category}» اضافه شد.")
+    else:
         bot.send_message(message.chat.id, "⚠️ این دسته‌بندی قبلاً وجود دارد.")
-    else:
-        db['categories'][name] = {}
-        save_db(db)
-        bot.send_message(message.chat.id, f"✅ دسته‌بندی '{name}' اضافه شد.")
+    admin_handler(bot, message, db, save_db)
 
-@bot.callback_query_handler(func=lambda call: call.data == "remove_category")
-def remove_category_callback(call):
-    markup = types.InlineKeyboardMarkup()
-    for cat in db['categories']:
-        markup.add(types.InlineKeyboardButton(cat, callback_data=f"delcat_{cat}"))
-    bot.send_message(call.message.chat.id, "📂 کدام دسته‌بندی را حذف کنیم؟", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("delcat_"))
-def confirm_remove_category(call):
-    cat = call.data.replace("delcat_", "")
-    if cat in db['categories']:
-        del db['categories'][cat]
+def delete_category(message, bot, db, save_db):
+    category = message.text.strip()
+    if category in db['categories']:
+        del db['categories'][category]
         save_db(db)
-        bot.send_message(call.message.chat.id, f"🗑 دسته‌بندی '{cat}' حذف شد.")
+        bot.send_message(message.chat.id, f"🗑 دسته‌بندی «{category}» حذف شد.")
     else:
-        bot.send_message(call.message.chat.id, "⚠️ چنین دسته‌ای وجود ندارد.")
+        bot.send_message(message.chat.id, "⚠️ این دسته‌بندی وجود ندارد.")
+    admin_handler(bot, message, db, save_db)
+
+def add_episode(message, bot, db, save_db):
+    category = message.text.strip()
+    if category in db['categories']:
+        msg = bot.send_message(message.chat.id, "نام قسمت جدید را بفرست:")
+        bot.register_next_step_handler(msg, lambda m: save_episode(m, bot, db, save_db, category))
+    else:
+        bot.send_message(message.chat.id, "⚠️ این دسته‌بندی وجود ندارد.")
+        admin_handler(bot, message, db, save_db)
+
+def save_episode(message, bot, db, save_db, category):
+    episode_name = message.text.strip()
+    msg = bot.send_message(message.chat.id, "آیدی فایل ویدیو (file_id) را بفرست:")
+    bot.register_next_step_handler(msg, lambda m: save_episode_file(m, bot, db, save_db, category, episode_name))
+
+def save_episode_file(message, bot, db, save_db, category, episode_name):
+    file_id = message.text.strip()
+    db['categories'][category][episode_name] = file_id
+    save_db(db)
+    bot.send_message(message.chat.id, f"✅ قسمت «{episode_name}» به دسته‌بندی «{category}» اضافه شد.")
+    admin_handler(bot, message, db, save_db)
+
+def delete_episode(message, bot, db, save_db):
+    category = message.text.strip()
+    if category in db['categories']:
+        msg = bot.send_message(message.chat.id, "نام قسمتی که می‌خواهید حذف کنید را بفرست:")
+        bot.register_next_step_handler(msg, lambda m: remove_episode(m, bot, db, save_db, category))
+    else:
+        bot.send_message(message.chat.id, "⚠️ این دسته‌بندی وجود ندارد.")
+        admin_handler(bot, message, db, save_db)
+
+def remove_episode(message, bot, db, save_db, category):
+    episode_name = message.text.strip()
+    if episode_name in db['categories'][category]:
+        del db['categories'][category][episode_name]
+        save_db(db)
+        bot.send_message(message.chat.id, f"🗑 قسمت «{episode_name}» از «{category}» حذف شد.")
+    else:
+        bot.send_message(message.chat.id, "⚠️ این قسمت وجود ندارد.")
+    admin_handler(bot, message, db, save_db)
+
+def show_categories(message, bot, db):
+    if db['categories']:
+        categories_text = "\n".join([f"📂 {c}" for c in db['categories']])
+    else:
+        categories_text = "❌ هیچ دسته‌بندی‌ای وجود ندارد."
+    bot.send_message(message.chat.id, categories_text)

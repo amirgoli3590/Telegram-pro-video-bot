@@ -1,28 +1,39 @@
 import requests
 
-MERCHANT_ID = 'YOUR_MERCHANT_ID'  # 👈 شب جای MerchantID خودتو می‌ذاری
-CALLBACK_URL = 'https://yourdomain.com/callback'  # 👈 بعد روی VPS اینو ست می‌کنیم
+MERCHANT_ID = 'YOUR_MERCHANT_ID'  # 🔥 وقتی زرین‌پال رو ساختی اینجا جایگذاری کن
+CALLBACK_URL = 'https://yourdomain.ir/verify'  # 🔥 دامنه تایید پرداخت
+AMOUNT = 10000  # مبلغ اشتراک ماهانه به تومان
+DESCRIPTION = 'خرید اشتراک ماهانه ربات'
 
 def create_payment_link(user_id):
     data = {
-        "MerchantID": MERCHANT_ID,
-        "Amount": 10000,  # مبلغ اشتراک (به تومان)
-        "CallbackURL": CALLBACK_URL,
-        "Description": f"خرید اشتراک توسط کاربر {user_id}"
+        "merchant_id": MERCHANT_ID,
+        "amount": AMOUNT,
+        "callback_url": CALLBACK_URL + f"?user_id={user_id}",
+        "description": DESCRIPTION
     }
-    response = requests.post('https://api.zarinpal.com/pg/v4/payment/request.json', json=data)
-    res = response.json()
-    if res['data']['code'] == 100:
-        link = f"https://www.zarinpal.com/pg/StartPay/{res['data']['authority']}"
-        return link, res['data']['authority']
-    return None, None
+    headers = {'content-type': 'application/json'}
+    response = requests.post('https://api.zarinpal.com/pg/v4/payment/request.json', json=data, headers=headers)
+    result = response.json()
+    if 'data' in result and result['data'].get('code') == 100:
+        link = f"https://www.zarinpal.com/pg/StartPay/{result['data']['authority']}"
+        authority = result['data']['authority']
+        return link, authority
+    else:
+        return None, None
 
-def verify_payment(authority):
+def verify_payment(authority, status):
+    if status != 'OK':
+        return False
     data = {
-        "MerchantID": MERCHANT_ID,
-        "Amount": 10000,
-        "Authority": authority
+        "merchant_id": MERCHANT_ID,
+        "amount": AMOUNT,
+        "authority": authority
     }
-    response = requests.post('https://api.zarinpal.com/pg/v4/payment/verify.json', json=data)
-    res = response.json()
-    return res['data']['code'] == 100
+    headers = {'content-type': 'application/json'}
+    response = requests.post('https://api.zarinpal.com/pg/v4/payment/verify.json', json=data, headers=headers)
+    result = response.json()
+    if 'data' in result and result['data'].get('code') == 100:
+        return True
+    else:
+        return False

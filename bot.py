@@ -12,6 +12,8 @@ CHANNEL_USERNAME = '@amiramir3590'
 ADMIN_ID = 7536757725
 DB_FILE = 'database.json'
 
+bot = telebot.TeleBot(TOKEN)
+
 # بارگذاری دیتابیس
 def load_db():
     if not os.path.exists(DB_FILE):

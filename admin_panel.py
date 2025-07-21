@@ -1,3 +1,4 @@
+from bot import bot
 from telebot import types
 
 def admin_handler(bot, message, db, save_db):
